@@ -1,0 +1,7 @@
+compile_commands.json
+.cache/
+./**/.cache/
+dist/*
+!dist/.gitkeep
+gen/*
+!gen/.gitkeep
