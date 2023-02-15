@@ -237,44 +237,44 @@ endif
 
 # Define directories.
 GEN_DIR:=gen
-SRC_DIR:=src
 DIST_DIR:=dist
+CORE_DIR:=core
+TOOL_DIR:=tool
 3PARTY_DIR:=thirdparty
-INC_DIRS:=$(3PARTY_DIR)/include
-EXE_NAME:=roki
+INCLUDE_DIRS:=$(3PARTY_DIR)/include $(CORE_DIR)
 
 # Define additional directories containing required header files
 ifeq ($(PLATFORM),PLATFORM_DESKTOP)
     ifeq ($(PLATFORM_OS),BSD)
-        INC_DIRS += /usr/local/include
+        INCLUDE_DIRS += /usr/local/include
     endif
 endif
 ifeq ($(PLATFORM),PLATFORM_RPI)
-    INC_DIRS += $(RPI_TOOLCHAIN_SYSROOT)/opt/vc/include
-    INC_DIRS += $(RPI_TOOLCHAIN_SYSROOT)/opt/vc/include/interface/vmcs_host/linux
-    INC_DIRS += $(RPI_TOOLCHAIN_SYSROOT)/opt/vc/include/interface/vcos/pthreads
+    INCLUDE_DIRS += $(RPI_TOOLCHAIN_SYSROOT)/opt/vc/include
+    INCLUDE_DIRS += $(RPI_TOOLCHAIN_SYSROOT)/opt/vc/include/interface/vmcs_host/linux
+    INCLUDE_DIRS += $(RPI_TOOLCHAIN_SYSROOT)/opt/vc/include/interface/vcos/pthreads
 endif
 ifeq ($(PLATFORM),PLATFORM_DRM)
-    INC_DIRS += /usr/include/libdrm
+    INCLUDE_DIRS += /usr/include/libdrm
 endif
 ifeq ($(PLATFORM),PLATFORM_ANDROID)
     NATIVE_APP_GLUE = $(ANDROID_NDK)/sources/android/native_app_glue
     # Include android_native_app_glue.h
-    INC_DIRS += $(NATIVE_APP_GLUE)
+    INCLUDE_DIRS += $(NATIVE_APP_GLUE)
 
     # Android required libraries
-    INC_DIRS += $(ANDROID_SYSROOT)/usr/include
+    INCLUDE_DIRS += $(ANDROID_SYSROOT)/usr/include
     ifeq ($(ANDROID_ARCH),arm)
-        INC_DIRS += $(ANDROID_SYSROOT)/usr/include/arminux-androideabi
+        INCLUDE_DIRS += $(ANDROID_SYSROOT)/usr/include/arminux-androideabi
     endif
     ifeq ($(ANDROID_ARCH),arm64)
-        INC_DIRS += $(ANDROID_SYSROOT)/usr/include/aarch64inux-android
+        INCLUDE_DIRS += $(ANDROID_SYSROOT)/usr/include/aarch64inux-android
     endif
     ifeq ($(ANDROID_ARCH),x86)
-        INC_DIRS += $(ANDROID_SYSROOT)/usr/include/i686inux-android
+        INCLUDE_DIRS += $(ANDROID_SYSROOT)/usr/include/i686inux-android
     endif
     ifeq ($(ANDROID_ARCH),x86_64)
-        INC_DIRS += $(ANDROID_SYSROOT)/usr/include/x86_64inux-android
+        INCLUDE_DIRS += $(ANDROID_SYSROOT)/usr/include/x86_64inux-android
     endif
 endif
 
@@ -322,17 +322,22 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
 endif
 
 # Include directories.
-CFLAGS+=$(INC_DIRS:%=-I%)
+CFLAGS+=$(INCLUDE_DIRS:%=-I%)
 
-# Define Helper variables.
-headers:=$(wildcard $(SRC_DIR)/*.h)
-srcs:=$(wildcard $(SRC_DIR)/*.c)
-objs:=$(srcs:$(SRC_DIR)/%.c=$(GEN_DIR)/%.o)
-exe_path:=$(DIST_DIR)/$(EXE_NAME)
-3party_static_libs:=$(wildcard $(3PARTY_DIR)/lib/*)
-link_shared_lib_flags:=$(LINK_SHARED_LIBS:%=-l%)
+# Define core.
+CORE_HEADERS:=$(wildcard $(CORE_DIR)/*.h)
+CORE_SOURCES:=$(wildcard $(CORE_DIR)/*.c)
+CORE_OBJECTS:=$(CORE_SOURCES:$(CORE_DIR)/%.c=$(GEN_DIR)/_CORE_%.o)
 
-default: setup-thirdparty compiledb $(exe_path)
+# Define tool.
+TOOL_HEADERS:=$(wildcard $(TOOL_DIR)/*.h)
+TOOL_SOURCES:=$(wildcard $(TOOL_DIR)/*.c)
+TOOL_OBJECTS:=$(TOOL_SOURCES:$(TOOL_DIR)/%.c=$(GEN_DIR)/_TOOL_%.o)
+TOOL_OUT:=$(DIST_DIR)/roki
+
+3PARTY_STATIC_LIBS:=$(wildcard $(3PARTY_DIR)/lib/*)
+
+default: setup-thirdparty compiledb $(TOOL_OUT)
 
 .PHONY: \
 	setup-thirdparty \
@@ -344,7 +349,7 @@ compiledb:
 	$(COMPILEDB) -n make
 
 clean:
-	rm -f $(objs) $(exe_path)
+	rm -f $(CORE_OBJECTS) $(TOOL_OBJECTS) $(TOOL_OUT)
 
 setup-thirdparty:
 	$(MAKE) -C $(3PARTY_DIR)
@@ -352,8 +357,11 @@ setup-thirdparty:
 clean-thirdparty:
 	$(MAKE) -C $(3PARTY_DIR) clean
 
-$(exe_path): $(objs)
-	$(CC) $(CFLAGS) $^ $(3party_static_libs) -o $@ $(link_shared_lib_flags)
+$(TOOL_OUT): $(TOOL_OBJECTS) $(CORE_OBJECTS)
+	$(CC) $(CFLAGS) $^ $(3PARTY_STATIC_LIBS) -o $@ $(LINK_SHARED_LIBS:%=-l%) 
 
-$(GEN_DIR)/%.o: $(SRC_DIR)/%.c $(headers)
+$(GEN_DIR)/_CORE_%.o: $(CORE_DIR)/%.c $(CORE_HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(GEN_DIR)/_TOOL_%.o: $(TOOL_DIR)/%.c $(TOOL_HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
